@@ -11,16 +11,16 @@ st.set_page_config(
     layout="wide"
 )
 
-@st.cache_data
+
 def load_data():
     df = pd.read_csv("main_data.csv")
     df.columns = df.columns.str.strip()
 
-
+    # datetime
     df["order_purchase_timestamp"] = pd.to_datetime(df["order_purchase_timestamp"])
     df["order_delivered_customer_date"] = pd.to_datetime(df["order_delivered_customer_date"])
 
-
+    # cleaning (harus sama persis)
     df = df.dropna(subset=["delivery_time", "review_score"])
     df = df[df["delivery_time"] >= 0]
 
@@ -29,6 +29,8 @@ def load_data():
     return df
 
 df = load_data()
+
+st.write("MAX delivery:", df["delivery_time"].max())
 
 st.title("📊 Dashboard Analisis E-Commerce")
 
@@ -85,7 +87,7 @@ st.header("📊 Kategori Produk dengan Review Tertinggi dan Terendah")
 
 cat_review = df.groupby("category_clean")["review_score"].mean()
 
-# HARUS top 5 & bottom 5
+
 top_5 = cat_review.sort_values(ascending=False).head(5)
 bottom_5 = cat_review.sort_values().head(5)
 
