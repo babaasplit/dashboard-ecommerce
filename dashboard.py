@@ -43,9 +43,8 @@ selected_score = st.sidebar.multiselect(
     default=sorted(df["review_score"].unique())
 )
 
-df_filtered = df[df["review_score"].isin(selected_score)]
+df_filtered = df[df["review_score"].isin(selected_score)].copy()
 
-# Header dashboard
 st.title("📊 Dashboard Analisis E-Commerce")
 
 col1, col2 = st.columns(2)
@@ -53,7 +52,6 @@ col1.metric("Total Transaksi", len(df_filtered))
 col2.metric("Rata-rata Review", round(df_filtered["review_score"].mean(), 2))
 
 st.markdown("---")
-
 
 st.header("1. Hubungan Delivery Time dengan Review Score (2017–2018)")
 
@@ -76,7 +74,7 @@ plt.tight_layout()
 st.pyplot(fig1)
 plt.close(fig1)
 
-# Menghitung rata-rata delivery time
+# Rata-rata delivery time
 avg_delivery = (
     df_filtered.groupby('review_score')['delivery_time']
     .mean()
@@ -103,21 +101,33 @@ st.markdown("---")
 
 st.header("2. Kategori Produk dengan Review Tertinggi dan Terendah (2017–2018)")
 
+# Pilih kolom kategori yang tersedia
+if 'product_category_name_english' in df_filtered.columns:
+    category_col = 'product_category_name_english'
+elif 'product_category_name' in df_filtered.columns:
+    category_col = 'product_category_name'
+elif 'category_clean' in df_filtered.columns:
+    category_col = 'category_clean'
+else:
+    st.error("Kolom kategori produk tidak ditemukan dalam dataset.")
+    st.stop()
+
+# Cleaning kategori
 df_filtered['category_clean'] = (
-    df_filtered['product_category_name_english']
+    df_filtered[category_col]
     .fillna('Other')
+    .astype(str)
     .str.replace('_', ' ', regex=False)
     .str.title()
 )
 
-# Menghitung rata-rata review per kategori
+# Rata-rata review per kategori
 cat_review = df_filtered.groupby('category_clean')['review_score'].mean()
 
-# Mengambil 5 kategori tertinggi dan terendah
+# Top 5 dan Bottom 5
 top_5 = cat_review.sort_values(ascending=False).head(5)
 bottom_5 = cat_review.sort_values().head(5)
 
-# Menggabungkan data
 combined = pd.concat([top_5, bottom_5])
 
 fig3, ax3 = plt.subplots(figsize=(10,5))
