@@ -3,49 +3,40 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
 
-sns.set_theme(style="whitegrid")
-
 st.set_page_config(
     page_title="Dashboard Analisis E-Commerce",
     page_icon="📊",
     layout="wide"
 )
 
+sns.set(style="whitegrid")
+
+# Fungsi untuk memuat dan membersihkan data
 @st.cache_data
 def load_data():
     df = pd.read_csv("main_data.csv")
     df.columns = df.columns.str.strip()
 
-    # datetime
+    # Konversi tipe data datetime
     df["order_purchase_timestamp"] = pd.to_datetime(df["order_purchase_timestamp"])
     df["order_delivered_customer_date"] = pd.to_datetime(df["order_delivered_customer_date"])
 
-    # cleaning
+    # Pembersihan data
     df = df.dropna(subset=["delivery_time", "review_score"])
     df = df[df["delivery_time"] >= 0]
 
-    # filter sesuai notebook (2017–2018)
+    # Filter data tahun 2017–2018
     df = df[
         (df["order_purchase_timestamp"].dt.year >= 2017) &
         (df["order_purchase_timestamp"].dt.year <= 2018)
     ]
 
-    # kategori
-    df["category_clean"] = (
-        df["category_clean"]
-        .astype(str)
-        .str.replace("_", " ")
-        .str.title()
-    )
-
-    df["review_score"] = df["review_score"].astype(int)
-
     return df
 
+# Memuat data
 df = load_data()
 
 st.sidebar.header("Filter Data")
-
 selected_score = st.sidebar.multiselect(
     "Pilih Review Score",
     sorted(df["review_score"].unique()),
@@ -54,6 +45,7 @@ selected_score = st.sidebar.multiselect(
 
 df_filtered = df[df["review_score"].isin(selected_score)]
 
+# Header dashboard
 st.title("📊 Dashboard Analisis E-Commerce")
 
 col1, col2 = st.columns(2)
@@ -62,105 +54,82 @@ col2.metric("Rata-rata Review", round(df_filtered["review_score"].mean(), 2))
 
 st.markdown("---")
 
-st.header("1. Hubungan Delivery Time dengan Review Score")
 
-st.markdown(
-    "Visualisasi berikut menunjukkan bagaimana lama waktu pengiriman memengaruhi tingkat kepuasan pelanggan."
-)
+st.header("1. Hubungan Delivery Time dengan Review Score (2017–2018)")
 
-# BOXPLOT (fix urutan)
-fig1, ax1 = plt.subplots(figsize=(10,6))
+order = sorted(df_filtered['review_score'].unique())
+
+fig1, ax1 = plt.subplots(figsize=(8,5))
 sns.boxplot(
+    x='review_score',
+    y='delivery_time',
     data=df_filtered,
-    x="review_score",
-    y="delivery_time",
-    order=sorted(df_filtered["review_score"].unique()),
+    order=order,
     ax=ax1
 )
-ax1.set_title("Delivery Time vs Review Score")
-ax1.set_xlabel("Review Score")
-ax1.set_ylabel("Delivery Time (Hari)")
 
+ax1.set_title('Hubungan Delivery Time dengan Review Score (2017–2018)')
+ax1.set_xlabel('Review Score')
+ax1.set_ylabel('Delivery Time (Hari)')
+
+plt.tight_layout()
 st.pyplot(fig1)
 plt.close(fig1)
 
-# LINEPLOT (fix urutan)
+# Menghitung rata-rata delivery time
 avg_delivery = (
-    df_filtered.groupby("review_score")["delivery_time"]
+    df_filtered.groupby('review_score')['delivery_time']
     .mean()
-    .reset_index()
-    .sort_values(by="review_score")
+    .sort_index()
 )
 
-fig2, ax2 = plt.subplots(figsize=(10,6))
-sns.lineplot(
-    data=avg_delivery,
-    x="review_score",
-    y="delivery_time",
-    marker="o",
-    ax=ax2
+fig2, ax2 = plt.subplots(figsize=(8,5))
+ax2.plot(
+    avg_delivery.index,
+    avg_delivery.values,
+    marker='o'
 )
-ax2.set_title("Rata-rata Delivery Time per Review Score")
-ax2.set_ylabel("Rata-rata Delivery Time (Hari)")
 
+ax2.set_title('Rata-rata Delivery Time berdasarkan Review Score (2017–2018)')
+ax2.set_xlabel('Review Score')
+ax2.set_ylabel('Rata-rata Delivery Time (Hari)')
+ax2.grid(True)
+
+plt.tight_layout()
 st.pyplot(fig2)
 plt.close(fig2)
 
-# Insight
-st.info(
-    "Semakin lama waktu pengiriman, cenderung review yang diberikan semakin rendah. "
-    "Pengiriman yang cepat umumnya menghasilkan kepuasan pelanggan yang lebih tinggi."
-)
-
 st.markdown("---")
 
-st.header("2. Kategori Produk dengan Kepuasan Tertinggi dan Terendah")
+st.header("2. Kategori Produk dengan Review Tertinggi dan Terendah (2017–2018)")
 
-category_mean = (
-    df_filtered.groupby("category_clean")["review_score"]
-    .mean()
+df_filtered['category_clean'] = (
+    df_filtered['product_category_name_english']
+    .fillna('Other')
+    .str.replace('_', ' ', regex=False)
+    .str.title()
 )
 
-# TOP 10
-top10 = category_mean.sort_values(ascending=False).head(10)
+# Menghitung rata-rata review per kategori
+cat_review = df_filtered.groupby('category_clean')['review_score'].mean()
 
-# BOTTOM 10
-bottom10 = category_mean.sort_values(ascending=True).head(10)
+# Mengambil 5 kategori tertinggi dan terendah
+top_5 = cat_review.sort_values(ascending=False).head(5)
+bottom_5 = cat_review.sort_values().head(5)
 
-colA, colB = st.columns(2)
+# Menggabungkan data
+combined = pd.concat([top_5, bottom_5])
 
-# Top 10
-with colA:
-    st.subheader("Top 10 Kategori")
-    fig3, ax3 = plt.subplots(figsize=(10,6))
-    sns.barplot(
-        x=top10.values,
-        y=top10.index,
-        order=top10.index,
-        ax=ax3
-    )
-    ax3.set_xlabel("Rata-rata Review")
-    ax3.set_ylabel("Kategori")
-    st.pyplot(fig3)
-    plt.close(fig3)
-
-# Bottom 10
-with colB:
-    st.subheader("Bottom 10 Kategori")
-    fig4, ax4 = plt.subplots(figsize=(10,6))
-    sns.barplot(
-        x=bottom10.values,
-        y=bottom10.index,
-        order=bottom10.index,
-        ax=ax4
-    )
-    ax4.set_xlabel("Rata-rata Review")
-    ax4.set_ylabel("Kategori")
-    st.pyplot(fig4)
-    plt.close(fig4)
-
-# Insight
-st.info(
-    "Terdapat perbedaan tingkat kepuasan antar kategori produk. "
-    "Beberapa kategori memiliki performa tinggi, sementara kategori lain masih perlu evaluasi lebih lanjut."
+fig3, ax3 = plt.subplots(figsize=(10,5))
+combined.sort_values().plot(
+    kind='barh',
+    ax=ax3
 )
+
+ax3.set_title('Kategori Produk dengan Review Tertinggi dan Terendah (2017–2018)')
+ax3.set_xlabel('Rata-rata Review Score')
+ax3.set_ylabel('Kategori Produk')
+
+plt.tight_layout()
+st.pyplot(fig3)
+plt.close(fig3)
