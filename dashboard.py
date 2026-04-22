@@ -9,137 +9,154 @@ st.set_page_config(
     layout="wide"
 )
 
-sns.set(style="whitegrid")
+st.title("📊 Dashboard Analisis E-Commerce")
 
-# Fungsi untuk memuat dan membersihkan data
 @st.cache_data
 def load_data():
-    df = pd.read_csv("main_data.csv")
-    df.columns = df.columns.str.strip()
+    customers_df = pd.read_csv('customers_dataset.csv')
+    items_df = pd.read_csv('order_items_dataset.csv')
+    reviews_df = pd.read_csv('order_reviews_dataset.csv')
+    orders_df = pd.read_csv('orders_dataset.csv')
+    category_df = pd.read_csv('product_category_name_translation.csv')
+    products_df = pd.read_csv('products_dataset.csv')
 
-    # Konversi tipe data datetime
-    df["order_purchase_timestamp"] = pd.to_datetime(df["order_purchase_timestamp"])
-    df["order_delivered_customer_date"] = pd.to_datetime(df["order_delivered_customer_date"])
+    # Convert datetime
+    orders_df['order_purchase_timestamp'] = pd.to_datetime(orders_df['order_purchase_timestamp'])
+    orders_df['order_delivered_customer_date'] = pd.to_datetime(orders_df['order_delivered_customer_date'])
+    reviews_df['review_creation_date'] = pd.to_datetime(reviews_df['review_creation_date'])
 
-    # Pembersihan data
-    df = df.dropna(subset=["delivery_time", "review_score"])
-    df = df[df["delivery_time"] >= 0]
+    # Drop missing penting
+    orders_df = orders_df.dropna(subset=['order_delivered_customer_date'])
 
-    # Filter data tahun 2017–2018
+    # Merge
+    df = orders_df.merge(reviews_df, on='order_id')
+    df = df.merge(items_df, on='order_id')
+    df = df.merge(products_df, on='product_id')
+    df = df.merge(category_df, on='product_category_name', how='left')
+
+    # Delivery time
+    df['delivery_time'] = (
+        df['order_delivered_customer_date'] -
+        df['order_purchase_timestamp']
+    ).dt.days
+
+    df = df[df['delivery_time'].notna()]
+    df = df[df['delivery_time'] >= 0]
+
     df = df[
-        (df["order_purchase_timestamp"].dt.year >= 2017) &
-        (df["order_purchase_timestamp"].dt.year <= 2018)
+        (df['order_purchase_timestamp'].dt.year >= 2017) &
+        (df['order_purchase_timestamp'].dt.year <= 2018)
     ]
 
     return df
 
-# Memuat data
-df = load_data()
+main_data = load_data()
 
-st.sidebar.header("Filter Data")
-selected_score = st.sidebar.multiselect(
-    "Pilih Review Score",
-    sorted(df["review_score"].unique()),
-    default=sorted(df["review_score"].unique())
-)
+st.header("📦 Analisis Delivery Time")
 
-df_filtered = df[df["review_score"].isin(selected_score)].copy()
-
-st.title("📊 Dashboard Analisis E-Commerce")
-
-col1, col2 = st.columns(2)
-col1.metric("Total Transaksi", len(df_filtered))
-col2.metric("Rata-rata Review", round(df_filtered["review_score"].mean(), 2))
-
-st.markdown("---")
-
-st.header("1. Hubungan Delivery Time dengan Review Score (2017–2018)")
-
-order = sorted(df_filtered['review_score'].unique())
+st.write("Statistik Deskriptif Delivery Time (dalam hari):")
+st.write(main_data['delivery_time'].describe())
 
 fig1, ax1 = plt.subplots(figsize=(8,5))
+ax1.hist(main_data['delivery_time'], bins=30)
+ax1.set_title('Distribusi Delivery Time')
+ax1.set_xlabel('Hari')
+ax1.set_ylabel('Jumlah')
+st.pyplot(fig1)
+
+st.header("⭐ Analisis Review Score")
+
+st.write("Distribusi Review Score:")
+st.write(main_data['review_score'].value_counts())
+
+fig2, ax2 = plt.subplots(figsize=(6,4))
+sns.countplot(x='review_score', data=main_data, ax=ax2)
+ax2.set_title('Distribusi Review Score')
+st.pyplot(fig2)
+
+st.header("🚚 Hubungan Delivery Time dengan Review Score")
+
+st.write("Rata-rata Delivery Time berdasarkan Review Score:")
+st.write(main_data.groupby('review_score')['delivery_time'].mean())
+
+order = sorted(main_data['review_score'].unique())
+
+fig3, ax3 = plt.subplots(figsize=(8,5))
 sns.boxplot(
     x='review_score',
     y='delivery_time',
-    data=df_filtered,
+    data=main_data,
     order=order,
-    ax=ax1
+    ax=ax3
 )
 
-ax1.set_title('Hubungan Delivery Time dengan Review Score (2017–2018)')
-ax1.set_xlabel('Review Score')
-ax1.set_ylabel('Delivery Time (Hari)')
+ax3.set_title('Hubungan Delivery Time dengan Review Score (2017–2018)')
+ax3.set_xlabel('Review Score')
+ax3.set_ylabel('Delivery Time (Hari)')
+st.pyplot(fig3)
 
-plt.tight_layout()
-st.pyplot(fig1)
-plt.close(fig1)
-
-# Rata-rata delivery time
 avg_delivery = (
-    df_filtered.groupby('review_score')['delivery_time']
+    main_data.groupby('review_score')['delivery_time']
     .mean()
     .sort_index()
 )
 
-fig2, ax2 = plt.subplots(figsize=(8,5))
-ax2.plot(
+fig4, ax4 = plt.subplots(figsize=(8,5))
+ax4.plot(
     avg_delivery.index,
     avg_delivery.values,
     marker='o'
 )
 
-ax2.set_title('Rata-rata Delivery Time berdasarkan Review Score (2017–2018)')
-ax2.set_xlabel('Review Score')
-ax2.set_ylabel('Rata-rata Delivery Time (Hari)')
-ax2.grid(True)
+ax4.set_title('Rata-rata Delivery Time berdasarkan Review Score (2017–2018)')
+ax4.set_xlabel('Review Score')
+ax4.set_ylabel('Rata-rata Delivery Time (Hari)')
+ax4.grid(True)
+st.pyplot(fig4)
 
-plt.tight_layout()
-st.pyplot(fig2)
-plt.close(fig2)
+st.header("📊 Analisis Kategori Produk")
 
-st.markdown("---")
-
-st.header("2. Kategori Produk dengan Review Tertinggi dan Terendah (2017–2018)")
-
-# Pilih kolom kategori yang tersedia
-if 'product_category_name_english' in df_filtered.columns:
-    category_col = 'product_category_name_english'
-elif 'product_category_name' in df_filtered.columns:
-    category_col = 'product_category_name'
-elif 'category_clean' in df_filtered.columns:
-    category_col = 'category_clean'
-else:
-    st.error("Kolom kategori produk tidak ditemukan dalam dataset.")
-    st.stop()
-
-# Cleaning kategori
-df_filtered['category_clean'] = (
-    df_filtered[category_col]
+main_data['category_clean'] = (
+    main_data['product_category_name_english']
     .fillna('Other')
-    .astype(str)
     .str.replace('_', ' ', regex=False)
     .str.title()
 )
 
-# Rata-rata review per kategori
-cat_review = df_filtered.groupby('category_clean')['review_score'].mean()
+cat_review = main_data.groupby('category_clean')['review_score'].mean()
 
-# Top 5 dan Bottom 5
 top_5 = cat_review.sort_values(ascending=False).head(5)
 bottom_5 = cat_review.sort_values().head(5)
 
 combined = pd.concat([top_5, bottom_5])
 
-fig3, ax3 = plt.subplots(figsize=(10,5))
-combined.sort_values().plot(
-    kind='barh',
-    ax=ax3
-)
+fig5, ax5 = plt.subplots(figsize=(10,5))
+combined.sort_values().plot(kind='barh', ax=ax5)
 
-ax3.set_title('Kategori Produk dengan Review Tertinggi dan Terendah (2017–2018)')
-ax3.set_xlabel('Rata-rata Review Score')
-ax3.set_ylabel('Kategori Produk')
+ax5.set_title('Kategori Produk dengan Review Tertinggi dan Terendah (2017–2018)')
+ax5.set_xlabel('Rata-rata Review Score')
+ax5.set_ylabel('Kategori Produk')
+st.pyplot(fig5)
 
-plt.tight_layout()
-st.pyplot(fig3)
-plt.close(fig3)
+st.header("⏱️ Delivery Time per Kategori Produk")
+
+cat_delivery = main_data.groupby('category_clean')['delivery_time'].mean()
+
+fast_5 = cat_delivery.sort_values().head(5)
+slow_5 = cat_delivery.sort_values(ascending=False).head(5)
+
+st.write("Kategori dengan pengiriman tercepat:")
+st.write(fast_5)
+
+st.write("Kategori dengan pengiriman terlama:")
+st.write(slow_5)
+
+combined2 = pd.concat([fast_5, slow_5])
+
+fig6, ax6 = plt.subplots(figsize=(10,5))
+combined2.sort_values().plot(kind='barh', ax=ax6)
+
+ax6.set_title('Kategori dengan Delivery Time Tercepat & Terlama')
+ax6.set_xlabel('Rata-rata Delivery Time (Hari)')
+ax6.set_ylabel('Kategori Produk')
+st.pyplot(fig6)
