@@ -11,16 +11,14 @@ st.set_page_config(
     layout="wide"
 )
 
-
+@st.cache_data
 def load_data():
     df = pd.read_csv("main_data.csv")
     df.columns = df.columns.str.strip()
 
-    # datetime
     df["order_purchase_timestamp"] = pd.to_datetime(df["order_purchase_timestamp"])
     df["order_delivered_customer_date"] = pd.to_datetime(df["order_delivered_customer_date"])
 
-    # cleaning (harus sama persis)
     df = df.dropna(subset=["delivery_time", "review_score"])
     df = df[df["delivery_time"] >= 0]
 
@@ -30,25 +28,33 @@ def load_data():
 
 df = load_data()
 
-st.write("MAX delivery:", df["delivery_time"].max())
+st.sidebar.header("Filter Data")
+
+score_filter = st.sidebar.multiselect(
+    "Pilih Review Score",
+    options=sorted(df["review_score"].unique()),
+    default=sorted(df["review_score"].unique())
+)
+
+filtered_df = df[df["review_score"].isin(score_filter)]
 
 st.title("📊 Dashboard Analisis E-Commerce")
 
 col1, col2 = st.columns(2)
-col1.metric("Total Transaksi", len(df))
-col2.metric("Rata-rata Review", round(df["review_score"].mean(), 2))
+col1.metric("Total Transaksi", len(filtered_df))
+col2.metric("Rata-rata Review", round(filtered_df["review_score"].mean(), 2))
 
 st.markdown("---")
 
 st.header("🚚 Hubungan Delivery Time dengan Review Score")
 
-order = sorted(df["review_score"].unique())
+order = sorted(filtered_df["review_score"].unique())
 
 fig1, ax1 = plt.subplots(figsize=(8,5))
 sns.boxplot(
     x="review_score",
     y="delivery_time",
-    data=df,
+    data=filtered_df,
     order=order,
     ax=ax1
 )
@@ -61,7 +67,7 @@ st.pyplot(fig1)
 plt.close(fig1)
 
 avg_delivery = (
-    df.groupby("review_score")["delivery_time"]
+    filtered_df.groupby("review_score")["delivery_time"]
     .mean()
     .sort_index()
 )
@@ -85,8 +91,7 @@ st.markdown("---")
 
 st.header("📊 Kategori Produk dengan Review Tertinggi dan Terendah")
 
-cat_review = df.groupby("category_clean")["review_score"].mean()
-
+cat_review = filtered_df.groupby("category_clean")["review_score"].mean()
 
 top_5 = cat_review.sort_values(ascending=False).head(5)
 bottom_5 = cat_review.sort_values().head(5)
